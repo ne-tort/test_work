@@ -1,0 +1,49 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from test_app.models.models import Wallet
+from sqlalchemy import select
+from uuid import UUID, uuid4
+from fastapi import HTTPException
+from pydantic import condecimal
+
+
+async def create_wallet(balance: condecimal(gt=0, decimal_places=2), db: AsyncSession):
+    wallet = Wallet(id=uuid4(), balance=balance)
+    try:
+        db.add(wallet)
+        await db.commit()
+        await db.refresh(wallet)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    return wallet
+
+async def get_wallet(wallet_uuid: UUID, db: AsyncSession):
+    try:
+        wallet = await db.execute(select(Wallet).filter(Wallet.id == wallet_uuid))
+        wallet = wallet.scalars().first()
+        if not wallet:
+            raise HTTPException(status_code=404, detail="Wallet not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    return wallet
+
+async def wallet_operation(wallet_uuid: UUID, operation : str, amount: condecimal, db: AsyncSession):
+    wallet = await get_wallet(wallet_uuid, db)
+    if operation == "DEPOSIT":
+        wallet.balance += amount
+    elif operation == "WITHDRAW":
+        if wallet.balance < amount:
+            raise HTTPException(status_code=400, detail="Insufficient funds")
+        wallet.balance -= amount
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown error")
+    try:
+        await db.commit()
+        await db.refresh(wallet)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Unknown error: {str(e)}")
+
+    return wallet

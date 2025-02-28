@@ -1,10 +1,12 @@
-import pytest
-import pytest_asyncio
+from fastapi.testclient import TestClient
 from test_app.models.models import Base
-from  test_app.db.database import engine
+from test_app.db.database import engine
+from decimal import Decimal
+import pytest_asyncio
 from test_app.main import app
-from httpx import AsyncClient, ASGITransport
 
+client = TestClient(app)
+balance = Decimal("100")
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_db():
@@ -14,39 +16,72 @@ async def setup_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
-@pytest.mark.asyncio
-async def test_wallet_operations(setup_db):
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        print("Start tests...")
-        print(">> Create test wallet...")
-        response = await client.post(f"/api/v1/wallets/new_wallet/100")
-        assert response.status_code == 200
-        wallet_uuid = response.json()["wallet_uuid"]
-        print(">> Successfully!")
-        print(">> Get wallet balance...")
-        response = await client.get(f"/api/v1/wallets/{wallet_uuid}")
-        assert response.status_code == 200
-        assert float(response.json()["balance"]) == 100
-        print(">> Successfully!")
-        print(">> Testing wallet operation - DEPOSIT...")
-        response = await client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "DEPOSIT", "amount": 50.00})
-        assert response.status_code == 200
-        assert float(response.json()["amount"]) == 50
-        print(">> Successfully!")
-        print(">> Testing wallet operation - WITHDRAW...")
-        response = await client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "WITHDRAW", "amount": 30.50})
-        assert response.status_code == 200
-        assert float(response.json()["amount"]) == 30.50
-        print(">> Successfully!")
-        print(">> Testing incorrect operation of the wallet...")
-        response = await client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "WITHDRAW", "amount": 500})
-        assert response.status_code == 400
-        print(">> Testing an invalid request......")
-        response = await client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "WITHDRAW", "amount": "test"})
-        assert response.status_code == 422
-        print(">> Successfully!")
-        print(">> Checking the final balance...")
-        response = await client.get(f"/api/v1/wallets/{wallet_uuid}")
-        assert response.status_code == 200
-        assert float(response.json()["balance"]) == 119.5
-        print(">> Successfully!")
+
+def create_wallet():
+    response = client.post(f"/api/v1/wallets/new_wallet/{balance}")
+    return response.json()["wallet_uuid"]
+
+
+def test_create_wallet():
+    wallet_uuid = create_wallet()
+    response = client.get(f"/api/v1/wallets/{wallet_uuid}")
+    assert response.status_code == 200
+    assert Decimal(response.json()["balance"]) == balance
+
+
+def test_deposit():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "DEPOSIT", "amount": '50.00'})
+    assert response.status_code == 200
+    assert Decimal(response.json()["amount"]) == Decimal('50.00')
+
+
+def test_withdraw():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "WITHDRAW", "amount": '30.50'})
+    assert response.status_code == 200
+    assert Decimal(response.json()["amount"]) == Decimal('30.50')
+
+
+def test_insufficient_funds():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "WITHDRAW", "amount": '500'})
+    assert response.status_code == 400
+
+
+def test_invalid_amount():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation",
+                           json={"operation": "WITHDRAW", "amount": "3465f"})
+    assert response.status_code == 422
+
+
+def test_negative_amount():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation",
+                           json={"operation": "WITHDRAW", "amount": -100})
+    assert response.status_code == 422
+
+
+def test_null_amount():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation",
+                           json={"operation": "WITHDRAW", "amount": 0})
+    assert response.status_code == 422
+
+
+def test_invalid_float_amount():
+    wallet_uuid = create_wallet()
+    response = client.post(f"/api/v1/wallets/{wallet_uuid}/operation",
+                           json={"operation": "WITHDRAW", "amount": 5.456546})
+    assert response.status_code == 422
+
+
+def test_final_balance():
+    wallet_uuid = create_wallet()
+    client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "DEPOSIT", "amount": '50.00'})
+    client.post(f"/api/v1/wallets/{wallet_uuid}/operation", json={"operation": "WITHDRAW", "amount": '30.50'})
+
+    response = client.get(f"/api/v1/wallets/{wallet_uuid}")
+    assert response.status_code == 200
+    assert Decimal(response.json()["balance"]) == balance + Decimal('50.00') - Decimal('30.50')

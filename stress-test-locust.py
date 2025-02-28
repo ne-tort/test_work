@@ -1,10 +1,10 @@
-from locust import HttpUser, task, constant
+from locust import FastHttpUser, task, constant
 from threading import Lock
 from logging import getLogger
 import random
 from decimal import Decimal
 
-class TestWallet(HttpUser):
+class TestWallet(FastHttpUser):
     wait_time = constant(0)
     balance_lock = Lock()
     logger = getLogger(__name__)
@@ -34,10 +34,10 @@ class TestWallet(HttpUser):
 
     @task
     def withdraw(self):
-        amount = Decimal(random.uniform(0.1, 100))
+        amount = Decimal(str(round(random.uniform(0.1, 100), 2)))
         with self.client.post(f"/api/v1/wallets/{TestWallet.wallet_uuid}/operation", json={
             "operation": "WITHDRAW",
-            "amount": amount
+            "amount": str(amount)
         }, catch_response=True) as response:
             if response.status_code == 200:
                 response.success()
@@ -49,10 +49,10 @@ class TestWallet(HttpUser):
 
     @task
     def deposit(self):
-        amount = Decimal(random.uniform(0.1, 100))
+        amount = Decimal(str(round(random.uniform(0.1, 100), 2)))
         with self.client.post(f"/api/v1/wallets/{TestWallet.wallet_uuid}/operation", json={
             "operation": "DEPOSIT",
-            "amount": amount
+            "amount": str(amount)
         }, catch_response=True) as response:
             if response.status_code == 200:
                 response.success()

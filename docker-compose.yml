@@ -3,7 +3,7 @@ version: '3.9'
 services:
   app:
     container_name: test_app
-    init: true
+    restart: always
     build:
       context: .
       dockerfile: ./Dockerfile
@@ -12,54 +12,55 @@ services:
     depends_on:
       - db
       - pgbouncer
-    user: root
+    user: 1000:1000
+    working_dir: /app
     volumes:
       - ./test_app:/app/test_app:ro
-      - ./requirements.txt:/app/requirements.txt:ro
-      - postgresql_socket:/var/run/postgresql:rw
-      - pip_cache:/pip_cache:rw
+      - pgbouncer_socket:/var/run/pgbouncer:rw
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@/${POSTGRES_DB}?host=/var/run/postgresql
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@/${POSTGRES_DB}?host=/var/run/pgbouncer&port=6432
       - UVICORN_NUMBER_WORKERS=${UVICORN_NUMBER_WORKERS}
       - UVICORN_LOG_LEVEL=${UVICORN_LOG_LEVEL}
       - UVICORN_PORT=${UVICORN_PORT}
-    command: ["/bin/sh", "-c", "pip install --upgrade pip && pip install -r requirements.txt && uvicorn test_app.main:app --host 0.0.0.0 --port ${UVICORN_PORT} --workers ${UVICORN_NUMBER_WORKERS} --log-level ${UVICORN_LOG_LEVEL}"]
-    
+    command: uvicorn test_app.main:app --host 0.0.0.0 --port ${UVICORN_PORT} --workers ${UVICORN_NUMBER_WORKERS} --log-level ${UVICORN_LOG_LEVEL}
+    networks:
+      - main_network
       
       
   db:
-    image: postgres
+    image: postgres:latest
     container_name: postgres_db
+    restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-    ports:
-      - "5432:5432"
     volumes:
       - ./db/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf
       - postgresql_socket:/var/run/postgresql:rw
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h db -p 5432 -U ${POSTGRES_USER}"]
       interval: 5s
       retries: 10
       timeout: 5s
+    networks:
+      - db_network
 
   pgbouncer:
-    image: edoburu/pgbouncer
+    image: edoburu/pgbouncer:latest
     container_name: pgbouncer
+    network_mode: none
+    restart: always
     depends_on:
       - db
-    ports:
-      - "6432:6432"
     volumes:
       - ./db/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
       - ./db/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt
+      - pgbouncer_socket:/var/run/pgbouncer:rw
       - postgresql_socket:/var/run/postgresql:rw
-      
+    
   liquibase:
-    image: liquibase/liquibase
+    image: liquibase/liquibase:latest
     environment:
       - LIQUIBASE_COMMAND_URL=jdbc:postgresql://db/${POSTGRES_DB}
       - LIQUIBASE_COMMAND_USERNAME=${POSTGRES_USER}
@@ -70,9 +71,17 @@ services:
       - ./db/liquibase/changelog:/liquibase/changelog
     depends_on:
       - db
+    networks:
+      - db_network
 
 volumes:
   postgresql_socket:
-  pip_cache:
+  pgbouncer_socket:
 
-
+networks:
+  main_network:
+    driver: bridge
+  db_network:
+    internal: true
+    
+    

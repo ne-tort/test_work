@@ -15,7 +15,3 @@ class Wallet(Base):
 
     def __repr__(self):
         return f"<Wallet(id={self.id}, balance={self.balance})>"
-
-async def get_db():
-    async with SessionLocal() as session:
-        yield session

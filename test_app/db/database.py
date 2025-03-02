@@ -9,8 +9,10 @@ else:
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=False,
-        pool_size=50,
-        max_overflow=100
+        pool_size=100,
+        max_overflow=50,
+        pool_timeout = 10,
+        pool_recycle=1800
     )
 
 SessionLocal = async_sessionmaker(
@@ -20,3 +22,7 @@ SessionLocal = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+async def get_db():
+    async with SessionLocal() as session:
+        yield session

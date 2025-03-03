@@ -11,7 +11,6 @@ else:
         echo=False,
         pool_size=100,
         max_overflow=100,
-        pool_timeout = 5,
         pool_recycle=1800,
         pool_pre_ping=True,
     )

@@ -75,6 +75,14 @@ services:
     networks:
       - db_network
 
+  redis:
+    image: redis:latest
+    container_name: test_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - main_network
+
 volumes:
   postgresql_socket:
   pgbouncer_socket:

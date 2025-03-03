@@ -38,7 +38,7 @@ async def wallet_operation(wallet_uuid: UUID, operation : str, amount: condecima
     elif operation == "WITHDRAW":
         if wallet.balance < amount:
             raise HTTPException(status_code=400, detail="Insufficient funds")
-        atomic = update(Wallet).where(Wallet.id == wallet_uuid).values(balance=Wallet.balance + amount)
+        atomic = update(Wallet).where(Wallet.id == wallet_uuid).values(balance=Wallet.balance - amount)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown error")
     try:

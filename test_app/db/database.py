@@ -10,9 +10,10 @@ else:
         settings.DATABASE_URL,
         echo=False,
         pool_size=100,
-        max_overflow=50,
-        pool_timeout = 10,
-        pool_recycle=1800
+        max_overflow=100,
+        pool_timeout = 5,
+        pool_recycle=1800,
+        pool_pre_ping=True,
     )
 
 SessionLocal = async_sessionmaker(

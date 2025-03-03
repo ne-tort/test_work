@@ -38,6 +38,7 @@ services:
     volumes:
       - ./db/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf
       - postgresql_socket:/var/run/postgresql:rw
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h db -p 5432 -U ${POSTGRES_USER}"]
       interval: 5s

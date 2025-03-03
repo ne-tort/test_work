@@ -1,4 +1,4 @@
-from locust import FastHttpUser, task, constant
+from locust import FastHttpUser, task, constant, events
 from threading import Lock
 from logging import getLogger
 import random
@@ -9,15 +9,14 @@ class TestWallet(FastHttpUser):
     balance_lock = Lock()
     logger = getLogger(__name__)
     wallet_uuid = None
-    balance = Decimal('100.00')
 
     def on_start(self):
         with TestWallet.balance_lock:
             if TestWallet.wallet_uuid is None:
-                self.create_wallet()
+                self.create_wallet('100.00')
 
-    def create_wallet(self):
-        response = self.client.post(f"/api/v1/wallets/new_wallet/{TestWallet.balance}")
+    def create_wallet(self, amount):
+        response = self.client.post(f"/api/v1/wallets/new_wallet/{amount}")
         if response.status_code == 200:
             TestWallet.wallet_uuid = response.json().get("wallet_uuid")
             TestWallet.logger.info(f"Wallet created, uuid: {TestWallet.wallet_uuid}")
@@ -34,7 +33,7 @@ class TestWallet(FastHttpUser):
 
     @task
     def withdraw(self):
-        amount = Decimal(str(round(random.uniform(0.1, 100), 2)))
+        amount = Decimal(random.uniform(0.1, 100)).quantize(Decimal('0.01'))
         with self.client.post(f"/api/v1/wallets/{TestWallet.wallet_uuid}/operation", json={
             "operation": "WITHDRAW",
             "amount": str(amount)
@@ -49,7 +48,7 @@ class TestWallet(FastHttpUser):
 
     @task
     def deposit(self):
-        amount = Decimal(str(round(random.uniform(0.1, 100), 2)))
+        amount = Decimal(random.uniform(0.1, 100)).quantize(Decimal('0.01'))
         with self.client.post(f"/api/v1/wallets/{TestWallet.wallet_uuid}/operation", json={
             "operation": "DEPOSIT",
             "amount": str(amount)
@@ -58,3 +57,10 @@ class TestWallet(FastHttpUser):
                 response.success()
             else:
                 response.failure(f"Unknown error: {response.status_code}")
+
+@events.test_stop.add_listener
+def clear(environment, **kwargs):
+    TestWallet.wallet_uuid = None
+    environment.stats.reset_all()
+    environment.runner.stats.total.reset()
+    environment.runner.stats.clear_all()

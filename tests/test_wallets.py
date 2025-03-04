@@ -22,12 +22,16 @@ def create_wallet():
     return response.json()["wallet_uuid"]
 
 
-def test_create_wallet():
+def test_get_balance():
     wallet_uuid = create_wallet()
     response = client.get(f"/api/v1/wallets/{wallet_uuid}")
     assert response.status_code == 200
     assert Decimal(response.json()["balance"]) == balance
 
+def test_invalid_wallet():
+    wallet_uuid = "afac809f-f5d7-4745-b1cf-ef230a461f09"
+    response = client.get(f"/api/v1/wallets/{wallet_uuid}")
+    assert response.status_code == 404
 
 def test_deposit():
     wallet_uuid = create_wallet()

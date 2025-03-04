@@ -4,9 +4,10 @@ from pydantic import condecimal
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from test_app.models.models import Wallet
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
+from sqlalchemy.exc import SQLAlchemyError
 
-@retry(stop=stop_after_attempt(5), wait=wait_fixed(0.5))
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(0.5), retry=retry_if_not_exception_type(HTTPException))
 async def create_wallet(balance: condecimal(gt=0, decimal_places=2), db: AsyncSession):
     wallet = Wallet(id=uuid4(), balance=balance)
     try:
@@ -18,19 +19,19 @@ async def create_wallet(balance: condecimal(gt=0, decimal_places=2), db: AsyncSe
 
     return wallet
 
-@retry(stop=stop_after_attempt(5), wait=wait_fixed(0.5))
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(0.5), retry=retry_if_not_exception_type(HTTPException))
 async def get_wallet(wallet_uuid: UUID, db: AsyncSession):
     try:
         wallet = await db.execute(select(Wallet).filter(Wallet.id == wallet_uuid))
         wallet = wallet.scalars().first()
         if not wallet:
             raise HTTPException(status_code=404, detail="Wallet not found")
-    except Exception as e:
+    except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     return wallet
 
-@retry(stop=stop_after_attempt(5), wait=wait_fixed(0.5))
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(0.5), retry=retry_if_not_exception_type(HTTPException))
 async def wallet_operation(wallet_uuid: UUID, operation : str, amount: condecimal, db: AsyncSession):
     wallet = await get_wallet(wallet_uuid, db)
     if operation == "DEPOSIT":
